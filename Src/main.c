@@ -28,7 +28,7 @@
 
 #define SYS_FREQ		16000000
 #define APB1_CLK		SYS_FREQ
-#define UART_BAUDRATE	115200
+#define UART_BAUDRATE	9600
 
 /*
  * PA0 - USART2_CTS
@@ -51,6 +51,9 @@ void uart2_write(int ch);
 static void uart_set_baudrate(USART_TypeDef *USARTx, uint32_t PeriphClk, uint32_t BaudRate);
 static uint16_t compute_uart_bd(uint32_t PeriphClk, uint32_t BaudRate);
 
+/************************************************* */
+/* MAIN */
+/************************************************* */
 int main(void)
 {
     uart2_tx_init();
@@ -58,6 +61,10 @@ int main(void)
     while(1)
     {
         uart2_write('Y');
+
+		for(int i=0; i < 100000; i++) {
+			__asm__ volatile ("nop");
+		}
     }
 }
 

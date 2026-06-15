@@ -122,7 +122,6 @@ target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
     ${compiler_OPTS}
     -fstack-usage
     # -fcyclomatic-complexity
-    -Wall
     -Wextra
     -Wpedantic
     -Wno-unused-parameter
