@@ -1,9 +1,9 @@
-build
-!.settings
+build/
+.settings/
 .vscode/
 cmake/
-.settings/
 .clangd
-.gitignore.swp
-..gitignore.un~
-.gitignore~
+
+# Editor backup files
+*~
+*.swp
