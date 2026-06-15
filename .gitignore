@@ -5,3 +5,5 @@ cmake/
 .settings/
 .clangd
 .gitignore.swp
+..gitignore.un~
+.gitignore~
