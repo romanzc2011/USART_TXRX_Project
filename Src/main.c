@@ -22,13 +22,34 @@
 
 #define USART2EN		(1U << 17)
 #define GPIOAEN			(1U << 0)
+#define GPIODEN			(1U << 3)
+
 #define CR1_TE			(1U << 3)
-#define CR1_UE			(1U << 13)
+#define SR_TC			(1U << 6)
 #define SR_TXE			(1U << 7)
+#define CR1_UE			(1U << 13)
 
 #define SYS_FREQ		16000000
 #define APB1_CLK		SYS_FREQ
 #define UART_BAUDRATE	9600
+
+#define TX_DONE_LED    		12 	// GREEN
+#define TX_READY_LED   		13	// ORANGE
+#define TX_BUSY_LED    		14	// RED
+#define LED15  				15  // BLUE
+#define CLR_DONE  			28
+#define CLR_READY			29
+#define CLR_BUSY			30
+#define LED_PINS_MODER  ((1U << (2U * TX_DONE_LED))  | \
+                         (1U << (2U * TX_READY_LED)) | \
+                         (1U << (2U * TX_BUSY_LED))  | \
+                         (1U << (2U * LED15)))
+
+#define LED_MODER_MASK  ((3U << (2U * TX_DONE_LED))  | \
+                         (3U << (2U * TX_READY_LED)) | \
+                         (3U << (2U * TX_BUSY_LED))  | \
+                         (3U << (2U * LED15)))
+
 
 /*
  * PA0 - USART2_CTS
@@ -42,30 +63,54 @@
  * 	Data        - USART_DR
  * 	Baud rate   - USART_BRR
  * 	Control 1   - USART_CR1 : has the TX, RX etc bits to set
- * */
+ * 
+ * TXE: [Transmit data register empty]: 
+ */
 
 void uart2_tx_init(void);
 void uart2_rx_init(void);
 void uart2_write(int ch);
+void txe_confirm(void);
+
+void gpiod_init(void);
+void busy_wait(void);
 
 static void uart_set_baudrate(USART_TypeDef *USARTx, uint32_t PeriphClk, uint32_t BaudRate);
 static uint16_t compute_uart_bd(uint32_t PeriphClk, uint32_t BaudRate);
+int __io_putchar(int ch);
 
 /************************************************* */
 /* MAIN */
 /************************************************* */
 int main(void)
 {
+	GPIOD->BSRR = (1U << CLR_DONE);
+	busy_wait();
     uart2_tx_init();
+	gpiod_init();
 
     while(1)
     {
         uart2_write('Y');
-
-		for(int i=0; i < 100000; i++) {
-			__asm__ volatile ("nop");
-		}
+		busy_wait();
     }
+}
+
+/****************************************************************/
+/* GPIOD INIT */
+/****************************************************************/
+void gpiod_init(void)
+{
+	/* Enable clock access to GPIOD */
+	RCC->AHB1ENR |= GPIODEN;
+
+	// Same as 0x04 on a 32bit reg
+	GPIOD->MODER &= ~LED_MODER_MASK;
+	GPIOD->MODER |= LED_PINS_MODER;
+
+	// Set for high speed
+	GPIOD->OSPEEDR |= (1U << 27);
+	GPIOD->OSPEEDR &= ~(1U << 26);
 }
 
 /****************************************************************/
@@ -102,11 +147,26 @@ void uart2_tx_init(void)
 /****************************************************************/
 void uart2_write(int ch)
 {
-	/* Ensure transmit data register is empty TXE */
-    // & allows you to read bit, returns true while it is enabled
-    while(!(USART2->SR & SR_TXE)){}
-	/* Write to transmit data register */
-	USART2->DR = (ch & 0xFF);
+    while (!(USART2->SR & SR_TXE)) {
+        GPIOD->BSRR = (1U << CLR_READY);
+        GPIOD->BSRR = (1U << CLR_DONE);
+        GPIOD->BSRR = (1U << TX_BUSY_LED);
+    }
+
+    GPIOD->BSRR = (1U << CLR_BUSY);
+    GPIOD->BSRR = (1U << CLR_DONE);
+    GPIOD->BSRR = (1U << TX_READY_LED);
+
+    USART2->DR = (ch & 0xFF);
+
+    while (!(USART2->SR & SR_TC)) {
+        GPIOD->BSRR = (1U << CLR_READY);
+        GPIOD->BSRR = (1U << TX_BUSY_LED);
+    }
+
+    GPIOD->BSRR = (1U << CLR_READY);
+    GPIOD->BSRR = (1U << CLR_BUSY);
+    GPIOD->BSRR = (1U << TX_DONE_LED);
 }
 
 /****************************************************************/
@@ -123,4 +183,23 @@ static void uart_set_baudrate(USART_TypeDef *USARTx, uint32_t PeriphClk, uint32_
 static uint16_t compute_uart_bd(uint32_t PeriphClk, uint32_t BaudRate)
 {
 	return ((PeriphClk + (BaudRate / 2U)) / BaudRate);
+}
+
+/****************************************************************/
+/* IO PUTCHAR */
+/****************************************************************/
+int __io_putchar(int ch)
+{
+	uart2_write(ch);
+	return ch;
+}
+
+/****************************************************************/
+/* ASM NOP BUSY WAIT */
+/****************************************************************/
+void busy_wait(void)
+{
+	for(int i=0; i < 100000; i++) {
+		__asm__ volatile ("nop");
+	}
 }
